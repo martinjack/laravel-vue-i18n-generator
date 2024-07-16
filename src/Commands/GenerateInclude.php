@@ -1,7 +1,6 @@
 <?php namespace MartinLindhe\VueInternationalizationGenerator\Commands;
 
 use Illuminate\Console\Command;
-
 use MartinLindhe\VueInternationalizationGenerator\Generator;
 
 class GenerateInclude extends Command
@@ -27,16 +26,16 @@ class GenerateInclude extends Command
      */
     public function handle()
     {
-        $root = base_path() . config('vue-i18n-generator.langPath');
+        $root   = base_path() . config('vue-i18n-generator.langPath');
         $config = config('vue-i18n-generator');
 
         // options
-        $umd = $this->option('umd');
-        $multipleFiles = $this->option('multi');
-        $withVendor = $this->option('with-vendor');
-        $fileName = $this->option('file-name');
-        $langFiles = $this->option('lang-files');
-        $format = $this->option('format');
+        $umd             = $this->option('umd');
+        $multipleFiles   = $this->option('multi');
+        $withVendor      = $this->option('with-vendor');
+        $fileName        = $this->option('file-name');
+        $langFiles       = $this->option('lang-files');
+        $format          = $this->option('format');
         $multipleLocales = $this->option('multi-locales');
 
         if ($umd) {
@@ -50,7 +49,7 @@ class GenerateInclude extends Command
 
         if ($multipleFiles || $multipleLocales) {
             $files = (new Generator($config))
-                ->generateMultiple($root, $format, $multipleLocales);
+                ->generateMultiple($root, $format, $multipleLocales, $multipleFiles);
 
             if ($config['showOutputMessages']) {
                 $this->info("Written to : " . $files);
@@ -65,7 +64,6 @@ class GenerateInclude extends Command
 
         $data = (new Generator($config))
             ->generateFromPath($root, $format, $withVendor, $langFiles);
-
 
         $jsFile = $this->getFileName($fileName);
         file_put_contents($jsFile, $data);

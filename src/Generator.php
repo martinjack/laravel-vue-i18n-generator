@@ -1,20 +1,19 @@
 <?php namespace MartinLindhe\VueInternationalizationGenerator;
 
+use App;
 use DirectoryIterator;
 use Exception;
-use App;
-use Traversable;
 
 class Generator
 {
     private $config;
 
     private $availableLocales = [];
-    private $filesToCreate = [];
+    private $filesToCreate    = [];
     private $langFiles;
 
-    const VUEX_I18N = 'vuex-i18n';
-    const VUE_I18N = 'vue-i18n';
+    const VUEX_I18N   = 'vuex-i18n';
+    const VUE_I18N    = 'vue-i18n';
     const ESCAPE_CHAR = '!';
 
     /**
@@ -52,12 +51,12 @@ class Generator
         $this->langFiles = $langFiles;
 
         $locales = [];
-        $files = [];
-        $dir = new DirectoryIterator($path);
-        $jsBody = '';
+        $files   = [];
+        $dir     = new DirectoryIterator($path);
+        $jsBody  = '';
         foreach ($dir as $fileinfo) {
             if (!$fileinfo->isDot()) {
-                if(!$withVendor
+                if (!$withVendor
                     && in_array($fileinfo->getFilename(), array_merge(['vendor'], $this->config['excludes']))
                 ) {
                     continue;
@@ -81,7 +80,10 @@ class Generator
                     $local = $this->allocateLocaleArray($fileinfo->getRealPath());
                 } else {
                     $local = $this->allocateLocaleJSON($fileinfo->getRealPath());
-                    if ($local === null) continue;
+                    if ($local === null) {
+                        continue;
+                    }
+
                 }
 
                 if (isset($locales[$noExt])) {
@@ -97,7 +99,7 @@ class Generator
         $jsonLocales = json_encode($locales, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
 
         if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new Exception('Could not generate JSON, error code '.json_last_error());
+            throw new Exception('Could not generate JSON, error code ' . json_last_error());
         }
 
         // formats other than 'es6' and 'umd' will become plain JSON
@@ -118,69 +120,163 @@ class Generator
      * @return string
      * @throws Exception
      */
-    public function generateMultiple($path, $format = 'es6', $multiLocales = false)
+    public function generateMultiple($path, $format = 'es6', $multiLocales = false, $multipleFiles = false)
     {
+
         if (!is_dir($path)) {
             throw new Exception('Directory not found: ' . $path);
         }
-        $jsPath = base_path() . $this->config['jsPath'];
-        $locales = [];
+
+        $jsPath       = base_path() . $this->config['jsPath'];
+        $locales      = [];
         $fileToCreate = '';
         $createdFiles = '';
-        $dir = new DirectoryIterator($path);
-        $jsBody = '';
+        $dir          = new DirectoryIterator($path);
+        $jsBody       = '';
+
         foreach ($dir as $fileinfo) {
+
             if (!$fileinfo->isDot()
                 && !in_array($fileinfo->getFilename(), array_merge(['vendor'], $this->config['excludes']))
                 && $fileinfo !== ''
             ) {
+
                 $noExt = $this->removeExtension($fileinfo->getFilename());
+
                 if ($noExt !== '') {
+
                     if (class_exists('App')) {
+
                         App::setLocale($noExt);
+
                     }
+
                     if (!in_array($noExt, $this->availableLocales)) {
+
                         $this->availableLocales[] = $noExt;
+
                     }
+
                     if ($fileinfo->isDir()) {
-                        $local = $this->allocateLocaleArray($fileinfo->getRealPath(), $multiLocales);
+
+                        $local = $this->allocateLocaleArray($fileinfo->getRealPath(), $multiLocales, $multipleFiles);
+
                     } else {
+
                         $local = $this->allocateLocaleJSON($fileinfo->getRealPath());
-                        if ($local === null) continue;
+
+                        if ($local === null) {
+                            continue;
+                        }
+
                     }
 
                     if (isset($locales[$noExt])) {
+
                         $locales[$noExt] = array_merge($local, $locales[$noExt]);
+
                     } else {
+
                         $locales[$noExt] = $local;
+
                     }
+
                 }
+
             }
+
         }
+
         foreach ($this->filesToCreate as $fileName => $data) {
-            $fileToCreate = $jsPath . $fileName . '.js';
-            $createdFiles .= $fileToCreate . PHP_EOL;
-            $jsonLocales = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                throw new Exception('Could not generate JSON, error code '.json_last_error());
-            }
-            if ($format === 'es6') {
-                $jsBody = $this->getES6Module($jsonLocales);
-            } elseif ($format === 'umd') {
-                $jsBody = $this->getUMDModule($jsonLocales);
+
+            if ($multipleFiles) {
+
+                foreach ($data as $folder => $item) {
+
+                    $tmp = [$folder => $item];
+
+                    $jsonLocales = json_encode($tmp, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        throw new Exception('Could not generate JSON, error code ' . json_last_error());
+                    }
+
+                    if ($format === 'es6') {
+
+                        $jsBody = $this->getES6Module($jsonLocales);
+
+                    } elseif ($format === 'umd') {
+
+                        $jsBody = $this->getUMDModule($jsonLocales);
+
+                    } else {
+
+                        $jsBody = $jsonLocales;
+
+                    }
+
+                    $fileToCreate = sprintf(
+
+                        '%s%s/%s.js',
+
+                        $jsPath,
+
+                        $folder,
+
+                        $fileName
+
+                    );
+
+                    if (!is_dir(dirname($fileToCreate))) {
+
+                        mkdir(dirname($fileToCreate), 0777, true);
+
+                    }
+
+                    file_put_contents($fileToCreate, $jsBody);
+
+                }
+
             } else {
-                $jsBody = $jsonLocales;
+
+                $fileToCreate = $jsPath . $fileName . '.js';
+
+                $createdFiles .= $fileToCreate . PHP_EOL;
+                $jsonLocales = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    throw new Exception('Could not generate JSON, error code ' . json_last_error());
+                }
+
+                if ($format === 'es6') {
+
+                    $jsBody = $this->getES6Module($jsonLocales);
+
+                } elseif ($format === 'umd') {
+
+                    $jsBody = $this->getUMDModule($jsonLocales);
+
+                } else {
+
+                    $jsBody = $jsonLocales;
+
+                }
+
+                if (!is_dir(dirname($fileToCreate))) {
+
+                    mkdir(dirname($fileToCreate), 0777, true);
+
+                }
+
+                file_put_contents($fileToCreate, $jsBody);
+
             }
 
-            if (!is_dir(dirname($fileToCreate))) {
-                mkdir(dirname($fileToCreate), 0777, true);
-            }
-
-            file_put_contents($fileToCreate, $jsBody);
         }
-        return $createdFiles;
-    }
 
+        return $createdFiles;
+
+    }
 
     /**
      * @param string $path
@@ -192,7 +288,7 @@ class Generator
         if (pathinfo($path, PATHINFO_EXTENSION) !== 'json') {
             return null;
         }
-        $tmp = (array)json_decode(file_get_contents($path), true);
+        $tmp = (array) json_decode(file_get_contents($path), true);
         if (gettype($tmp) !== "array") {
             throw new Exception('Unexpected data while processing ' . $path);
         }
@@ -204,10 +300,10 @@ class Generator
      * @param string $path
      * @return array
      */
-    private function allocateLocaleArray($path, $multiLocales = false)
+    private function allocateLocaleArray($path, $multiLocales = false, $multipleFiles = false)
     {
-        $data = [];
-        $dir = new DirectoryIterator($path);
+        $data       = [];
+        $dir        = new DirectoryIterator($path);
         $lastLocale = last($this->availableLocales);
         foreach ($dir as $fileinfo) {
             // Do not mess with dotfiles at all.
@@ -220,7 +316,7 @@ class Generator
 
                 $data[$fileinfo->getFilename()] = $this->allocateLocaleArray($path . DIRECTORY_SEPARATOR . $fileinfo->getFilename());
             } else {
-                $noExt = $this->removeExtension($fileinfo->getFilename());
+                $noExt    = $this->removeExtension($fileinfo->getFilename());
                 $fileName = $path . DIRECTORY_SEPARATOR . $fileinfo->getFilename();
 
                 // Ignore non *.php files (ex.: .gitignore, vim swap files etc.)
@@ -232,22 +328,33 @@ class Generator
                     continue;
                 }
 
-                $tmp = include($fileName);
+                $tmp = include $fileName;
 
                 if (gettype($tmp) !== "array") {
                     throw new Exception('Unexpected data while processing ' . $fileName);
                     continue;
                 }
                 if ($lastLocale !== false) {
-                    $root = realpath(base_path() . $this->config['langPath'] . DIRECTORY_SEPARATOR . $lastLocale);
+
+                    $root     = realpath(base_path() . $this->config['langPath'] . DIRECTORY_SEPARATOR . $lastLocale);
                     $filePath = $this->removeExtension(str_replace('\\', '_', ltrim(str_replace($root, '', realpath($fileName)), '\\')));
-                    if($filePath[0] === DIRECTORY_SEPARATOR) {
+
+                    if ($filePath[0] === DIRECTORY_SEPARATOR) {
                         $filePath = substr($filePath, 1);
                     }
-                    if ($multiLocales) {
+
+                    if ($multipleFiles && $multiLocales) {
+
+                        $this->filesToCreate[$lastLocale][$filePath] = $this->adjustArray($tmp);
+
+                    } elseif ($multiLocales) {
+
                         $this->filesToCreate[$lastLocale][$lastLocale][$filePath] = $this->adjustArray($tmp);
+
                     } else {
+
                         $this->filesToCreate[$filePath][$lastLocale] = $this->adjustArray($tmp);
+
                     }
                 }
 
@@ -269,7 +376,7 @@ class Generator
         }
 
         return (isset($this->config['langFiles']) && !empty($this->config['langFiles']) && !in_array($noExt, $this->config['langFiles']))
-                    || (isset($this->config['excludes']) && in_array($noExt, $this->config['excludes']));
+            || (isset($this->config['excludes']) && in_array($noExt, $this->config['excludes']));
     }
 
     /**
@@ -329,8 +436,8 @@ class Generator
 
         if ($this->config['i18nLib'] === self::VUEX_I18N) {
             $searchPipePattern = '/(\s)*(\|)(\s)*/';
-            $threeColons = ' ::: ';
-            $s = preg_replace($searchPipePattern, $threeColons, $s);
+            $threeColons       = ' ::: ';
+            $s                 = preg_replace($searchPipePattern, $threeColons, $s);
         }
 
         $escaped_escape_char = preg_quote($this->config['escape_char'], '/');
